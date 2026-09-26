@@ -1,0 +1,4 @@
+supplier_id,name,region,lead_time,score
+101,Northwind Components,North America,7,92
+102,Harbor Supply,Europe,10,85
+103,GreenLine Goods,Asia,5,90
