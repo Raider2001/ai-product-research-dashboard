@@ -9,7 +9,7 @@ import { Product, Supplier } from "./models.js";
 
 type CatalogProduct = Record<string, unknown>;
 
-export function publicProduct(doc: { _id: unknown; payload: CatalogProduct }) {
+export function publicProduct(doc: { _id: unknown; payload: CatalogProduct }): CatalogProduct & { id: string } {
   return {
     ...doc.payload,
     id: String(doc._id)

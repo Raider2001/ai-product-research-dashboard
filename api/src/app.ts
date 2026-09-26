@@ -1,6 +1,8 @@
 import bcrypt from "bcryptjs";
 import cors from "cors";
 import express from "express";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { requireUser, signToken } from "./auth.js";
 import { catalogMetrics, launchCatalog, productsForUser, replaceCatalog } from "./catalog.js";
 import { Product, ResearchNote, Supplier, User } from "./models.js";
@@ -186,6 +188,20 @@ export function createApp() {
       next(error);
     }
   });
+
+  // In production (Render) the API also serves the built React client, so the whole
+  // app runs as one web service on one origin.
+  if (process.env.SERVE_CLIENT === "true") {
+    const clientDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../client/dist");
+    app.use(express.static(clientDist));
+    app.use((req, res, next) => {
+      if (req.path.startsWith("/api") || req.path === "/health") {
+        next();
+        return;
+      }
+      res.sendFile(path.join(clientDist, "index.html"));
+    });
+  }
 
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error(error);
