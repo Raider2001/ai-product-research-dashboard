@@ -1,5 +1,7 @@
 # AI Product Research Dashboard
 
+**Live demo:** <https://ai-product-research-dashboard.onrender.com> — demo account `demo@store.test` / `password123`. (Free-tier hosting: the first load after an idle period takes ~50 seconds while the server wakes up.)
+
 Grade supplier catalogs (TopDawg / CJ) for a **30-SKU organization store**: 10 Home Organization, 10 Desk & Office, 10 Kitchen Organization.
 
 This is not a “list 5,000 products” tool. It scores niche fit, profit after Shopify fees, shipping speed, competition, and photo quality, then tells you Add Immediately / Consider / Test Later / Skip.
