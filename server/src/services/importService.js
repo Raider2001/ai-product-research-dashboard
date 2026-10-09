@@ -202,14 +202,17 @@ function toWorkspaceRecord(record, index) {
   };
 }
 
-export function parseCsvCatalog(csvText) {
-  const records = parse(csvText.replace(/^\uFEFF/, ''), {
+function parseRecords(csvText) {
+  return parse(csvText.replace(/^\uFEFF/, ''), {
     columns: true,
     skip_empty_lines: true,
     trim: true,
     relax_column_count: true,
     bom: true
   });
+}
+
+function buildCatalogFromRecords(records) {
   const collapsed = collapseWarehouseRows(records);
 
   const products = collapsed.map((record, index) => {
@@ -221,6 +224,10 @@ export function parseCsvCatalog(csvText) {
   });
 
   return collapseMappedProducts(products);
+}
+
+export function parseCsvCatalog(csvText) {
+  return buildCatalogFromRecords(parseRecords(csvText));
 }
 
 function collapseMappedProducts(products) {
@@ -253,23 +260,25 @@ function collapseMappedProducts(products) {
   });
 }
 
-export function importCsvCatalog(csvText) {
-  const rawCount = parse(csvText.replace(/^\uFEFF/, ''), {
-    columns: true,
-    skip_empty_lines: true,
-    trim: true,
-    relax_column_count: true,
-    bom: true
-  }).length;
-  const products = parseCsvCatalog(csvText);
+export function importCsvCatalogs(csvTexts) {
+  const texts = Array.isArray(csvTexts) ? csvTexts : [csvTexts];
+  // Merge every file's rows before the collapse passes so duplicates that
+  // span files (same SPU or name) dedupe exactly like duplicates in one file.
+  const allRecords = texts.flatMap((text) => parseRecords(text));
+  const products = buildCatalogFromRecords(allRecords);
   const usCount = products.filter((product) => product.us_based === 'Y').length;
 
   return {
     products,
     total: products.length,
-    raw_row_count: rawCount,
-    collapsed_row_count: Math.max(0, rawCount - products.length),
+    raw_row_count: allRecords.length,
+    collapsed_row_count: Math.max(0, allRecords.length - products.length),
     us_warehouse_count: usCount,
-    non_us_count: products.length - usCount
+    non_us_count: products.length - usCount,
+    file_count: texts.length
   };
+}
+
+export function importCsvCatalog(csvText) {
+  return importCsvCatalogs([csvText]);
 }

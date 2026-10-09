@@ -1,16 +1,14 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../api";
 import { useAuth } from "../AuthContext";
+import GradeChart from "../components/GradeChart";
+import NotesPanel from "../components/NotesPanel";
+import ProductTable from "../components/ProductTable";
+import StatsBar from "../components/StatsBar";
+import { MAX_IMAGES_PER_PRODUCT, filesToDataUrls } from "../imageTools";
+import { filesToCsvTexts } from "../importFiles";
 import type { Metrics, Note, Product, SessionUser } from "../types";
-
-function gradeClass(grade: string) {
-  if (grade === "Add Immediately") return "grade grade-add";
-  if (grade === "Consider") return "grade grade-consider";
-  if (grade === "Test Later") return "grade grade-test";
-  return "grade grade-skip";
-}
 
 function rowsToCsv(rows: Array<Record<string, unknown>>) {
   if (rows.length === 0) return "";
@@ -26,6 +24,18 @@ function rowsToCsv(rows: Array<Record<string, unknown>>) {
   return lines.join("\n");
 }
 
+function downloadCsv(csv: string, filename: string) {
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+type Status = { kind: "info" | "success" | "error"; text: string } | null;
+
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { user, setUser, logout: clearAuth } = useAuth();
@@ -35,9 +45,7 @@ export default function DashboardPage() {
   const [usOnly, setUsOnly] = useState(true);
   const [grade, setGrade] = useState("all");
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("");
-  const [noteTitle, setNoteTitle] = useState("");
-  const [noteBody, setNoteBody] = useState("");
+  const [status, setStatus] = useState<Status>(null);
 
   async function load() {
     const params = new URLSearchParams({
@@ -59,7 +67,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     load().catch((error: unknown) => {
-      setStatus(error instanceof Error ? error.message : "Could not load the dashboard");
+      setStatus({ kind: "error", text: error instanceof Error ? error.message : "Could not load the dashboard" });
       if (error instanceof Error && error.message.toLowerCase().includes("log in")) {
         clearAuth();
         navigate("/login");
@@ -77,20 +85,55 @@ export default function DashboardPage() {
     [metrics]
   );
 
+  const chartSummary = `Grade distribution. Add Immediately: ${metrics?.add_immediately ?? 0}. Consider: ${metrics?.consider ?? 0}. Test Later: ${metrics?.test_later ?? 0}. Skip: ${metrics?.skip ?? 0}.`;
+  const selectedCount = products.filter((product) => product.selected).length;
+
   async function onImport(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setStatus("Scoring catalog...");
-    const csvText = await file.text();
+    const files = Array.from(event.target.files ?? []);
+    if (files.length === 0) return;
+    setStatus({ kind: "info", text: `Converting and scoring ${files.length} file(s)...` });
     try {
+      const csvTexts = await filesToCsvTexts(files);
       const result = await api<{ message: string; total: number }>("/api/imports/catalog", {
         method: "POST",
-        body: JSON.stringify({ csvText })
+        body: JSON.stringify({ csvTexts })
       });
-      setStatus(`${result.message} ${result.total} products saved.`);
+      setStatus({ kind: "success", text: `${result.message} ${result.total} products saved from ${files.length} file(s).` });
       await load();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Import failed");
+      setStatus({ kind: "error", text: error instanceof Error ? error.message : "Import failed" });
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  async function updateSelection(ids: string[], selected: boolean) {
+    if (ids.length === 0) return;
+    try {
+      await api("/api/products/selection", {
+        method: "POST",
+        body: JSON.stringify({ ids, selected })
+      });
+      setProducts((prev) => prev.map((product) => (ids.includes(product.id) ? { ...product, selected } : product)));
+    } catch (error) {
+      setStatus({ kind: "error", text: error instanceof Error ? error.message : "Could not update the selection" });
+    }
+  }
+
+  async function onUploadPhotos(product: Product, event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length === 0) return;
+    setStatus({ kind: "info", text: "Resizing and saving photos..." });
+    try {
+      const images = await filesToDataUrls(files, MAX_IMAGES_PER_PRODUCT);
+      const result = await api<{ product: Product; message: string }>(`/api/products/${product.id}/images`, {
+        method: "POST",
+        body: JSON.stringify({ images })
+      });
+      setProducts((prev) => prev.map((item) => (item.id === product.id ? result.product : item)));
+      setStatus({ kind: "success", text: result.message });
+    } catch (error) {
+      setStatus({ kind: "error", text: error instanceof Error ? error.message : "Photo upload failed" });
     } finally {
       event.target.value = "";
     }
@@ -98,26 +141,44 @@ export default function DashboardPage() {
 
   async function downloadLaunch() {
     const result = await api<{ rows: Array<Record<string, unknown>>; total: number }>("/api/launch-catalog");
-    const csv = rowsToCsv(result.rows);
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "launch-catalog.csv";
-    link.click();
-    URL.revokeObjectURL(url);
-    setStatus(`Downloaded ${result.total} launch products.`);
+    downloadCsv(rowsToCsv(result.rows), "launch-catalog.csv");
+    setStatus({ kind: "success", text: `Downloaded ${result.total} launch products.` });
   }
 
-  async function onNote(event: FormEvent) {
-    event.preventDefault();
-    await api("/api/research-notes", {
-      method: "POST",
-      body: JSON.stringify({ title: noteTitle, note: noteBody })
-    });
-    setNoteTitle("");
-    setNoteBody("");
-    await load();
+  async function downloadShopify() {
+    try {
+      const result = await api<{ rows: Array<Record<string, string>>; product_count: number; skipped_no_image: number }>(
+        "/api/exports/shopify"
+      );
+      if (result.product_count === 0) {
+        setStatus({ kind: "error", text: "Select at least one product first (use the checkboxes)." });
+        return;
+      }
+      // UTF-8 BOM so Excel opens the file with correct characters.
+      downloadCsv("﻿" + rowsToCsv(result.rows), "shopify-products.csv");
+      const imageNote = result.skipped_no_image
+        ? ` ${result.skipped_no_image} product(s) have no hosted image URL, so they export without photos.`
+        : "";
+      setStatus({
+        kind: "success",
+        text: `Exported ${result.product_count} products for Shopify. Import the file in Shopify Admin > Products > Import.${imageNote}`
+      });
+    } catch (error) {
+      setStatus({ kind: "error", text: error instanceof Error ? error.message : "Shopify export failed" });
+    }
+  }
+
+  async function createNote(title: string, note: string) {
+    try {
+      await api("/api/research-notes", {
+        method: "POST",
+        body: JSON.stringify({ title, note })
+      });
+      await load();
+    } catch (error) {
+      setStatus({ kind: "error", text: error instanceof Error ? error.message : "Could not save the note" });
+      throw error;
+    }
   }
 
   function logout() {
@@ -143,7 +204,7 @@ export default function DashboardPage() {
           <input type="checkbox" checked={usOnly} onChange={(event) => setUsOnly(event.target.checked)} />
           US warehouse only
         </label>
-        <select value={grade} onChange={(event) => setGrade(event.target.value)}>
+        <select value={grade} aria-label="Filter by grade" onChange={(event) => setGrade(event.target.value)}>
           <option value="all">All grades</option>
           <option>Add Immediately</option>
           <option>Consider</option>
@@ -153,93 +214,55 @@ export default function DashboardPage() {
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            load().catch((error: unknown) => setStatus(error instanceof Error ? error.message : "Search failed"));
+            load().catch((error: unknown) =>
+              setStatus({ kind: "error", text: error instanceof Error ? error.message : "Search failed" })
+            );
           }}
         >
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search product name (press Enter)" />
+          <input
+            value={query}
+            aria-label="Search product name"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search product name (press Enter)"
+          />
         </form>
+        <button
+          type="button"
+          disabled={grade === "all"}
+          onClick={() => updateSelection(products.filter((product) => product.grade === grade).map((product) => product.id), true)}
+        >
+          Select all {grade === "all" ? "(pick a grade)" : grade}
+        </button>
         <label className="file-button">
-          Import CSV
-          <input type="file" accept=".csv,text/csv" onChange={onImport} />
+          Import CSV / Excel
+          <input
+            type="file"
+            multiple
+            accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+            aria-label="Import catalog files (CSV or Excel)"
+            onChange={onImport}
+          />
         </label>
         <button type="button" onClick={downloadLaunch}>Download launch list</button>
+        <button type="button" onClick={downloadShopify}>
+          Export selected to Shopify{selectedCount > 0 ? ` (${selectedCount})` : ""}
+        </button>
       </section>
 
-      {status ? <p className="status">{status}</p> : null}
+      <p role="status" aria-live="polite" className={status ? `status status-${status.kind}` : "visually-hidden"}>
+        {status?.text ?? ""}
+      </p>
 
-      <section className="stats">
-        <article><span>Catalog</span><strong>{metrics?.catalog_size ?? 0}</strong></article>
-        <article><span>Add now</span><strong>{metrics?.add_immediately ?? 0}</strong></article>
-        <article><span>Consider</span><strong>{metrics?.consider ?? 0}</strong></article>
-        <article><span>Niche fits</span><strong>{metrics?.relevant_to_niche ?? 0}</strong></article>
-      </section>
+      <StatsBar metrics={metrics} />
 
       <section className="workspace">
         <div className="panel">
           <h2>Grades</h2>
-          <div className="chart">
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="grade" />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="count" fill="#0f6e6e" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>Collection</th>
-                  <th>Days</th>
-                  <th>Margin</th>
-                  <th>Score</th>
-                  <th>Grade</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products.map((product) => (
-                  <tr key={product.id}>
-                    <td>
-                      <strong>{product.name}</strong>
-                      <small>{product.listing_reason || product.supplier_name}</small>
-                    </td>
-                    <td>{product.collection || "Other"}</td>
-                    <td>{product.delivery_days_label || product.delivery_days || "—"}</td>
-                    <td>{product.estimated_margin ?? 0}%</td>
-                    <td>{product.overall_score ?? 0}</td>
-                    <td><span className={gradeClass(product.grade)}>{product.grade}</span></td>
-                  </tr>
-                ))}
-                {products.length === 0 ? (
-                  <tr>
-                    <td colSpan={6}>No products match these filters. Import a CSV or turn off US only.</td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
+          <GradeChart data={chartData} summary={chartSummary} />
+          <ProductTable products={products} onToggleSelect={updateSelection} onUploadPhotos={onUploadPhotos} />
         </div>
 
-        <aside className="panel notes">
-          <h2>Research notes</h2>
-          <form onSubmit={onNote}>
-            <input value={noteTitle} onChange={(event) => setNoteTitle(event.target.value)} placeholder="Title" required />
-            <textarea value={noteBody} onChange={(event) => setNoteBody(event.target.value)} placeholder="Why this product is in or out" required />
-            <button type="submit">Save note</button>
-          </form>
-          <ul>
-            {notes.map((note) => (
-              <li key={note._id}>
-                <strong>{note.title}</strong>
-                <p>{note.note}</p>
-              </li>
-            ))}
-          </ul>
-        </aside>
+        <NotesPanel notes={notes} onCreate={createNote} />
       </section>
     </div>
   );

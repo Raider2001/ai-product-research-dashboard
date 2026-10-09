@@ -873,6 +873,89 @@ export function slugify(value) {
     .slice(0, 80);
 }
 
+export const SHOPIFY_CSV_COLUMNS = [
+  'Handle', 'Title', 'Body (HTML)', 'Vendor', 'Type', 'Tags', 'Published',
+  'Option1 Name', 'Option1 Value', 'Variant SKU', 'Variant Grams',
+  'Variant Inventory Policy', 'Variant Fulfillment Service', 'Variant Price',
+  'Variant Requires Shipping', 'Variant Taxable', 'Image Src', 'Image Alt Text', 'Status'
+];
+
+function escapeHtmlText(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function emptyShopifyRow() {
+  const row = {};
+  for (const column of SHOPIFY_CSV_COLUMNS) {
+    row[column] = '';
+  }
+  return row;
+}
+
+export function toShopifyCsvRows(product, handle) {
+  // Shopify's importer fetches Image Src over HTTP, so uploaded base64
+  // data-URLs cannot be exported — only hosted image URLs qualify.
+  const httpImages = (Array.isArray(product.image_urls) ? product.image_urls : [])
+    .filter((url) => /^https?:\/\//i.test(String(url)));
+  const altText = product.image_alt_text || product.name || '';
+  const price = toNumber(product.list_price_recommended) || toNumber(product.product_price ?? product.price);
+
+  const main = emptyShopifyRow();
+  main.Handle = handle;
+  main.Title = String(product.name || '');
+  main['Body (HTML)'] = `<p>${escapeHtmlText(product.description || product.fit_reason || '')}</p>`;
+  main.Vendor = String(product.supplier_name || 'Unknown');
+  main.Type = String(product.collection || product.category || '');
+  main.Tags = [product.collection, product.category, product.subcategory].filter(Boolean).join(', ');
+  main.Published = 'TRUE';
+  main['Option1 Name'] = 'Title';
+  main['Option1 Value'] = 'Default Title';
+  main['Variant SKU'] = String(product.source_product_id || '');
+  main['Variant Grams'] = String(Math.round(toNumber(product.per_piece_weight) * 453.592));
+  main['Variant Inventory Policy'] = 'deny';
+  main['Variant Fulfillment Service'] = 'manual';
+  main['Variant Price'] = price.toFixed(2);
+  main['Variant Requires Shipping'] = 'TRUE';
+  main['Variant Taxable'] = 'TRUE';
+  main['Image Src'] = httpImages[0] || '';
+  main['Image Alt Text'] = httpImages[0] ? altText : '';
+  main.Status = 'active';
+
+  const extraImageRows = httpImages.slice(1).map((url) => {
+    const row = emptyShopifyRow();
+    row.Handle = handle;
+    row['Image Src'] = url;
+    row['Image Alt Text'] = altText;
+    return row;
+  });
+
+  return [main, ...extraImageRows];
+}
+
+export function buildShopifyExportRows(products = []) {
+  const usedHandles = new Map();
+  const rows = [];
+  let skippedNoImage = 0;
+
+  for (const product of products) {
+    const base = slugify(product.name) || `product-${product.product_id || rows.length + 1}`;
+    const count = usedHandles.get(base) || 0;
+    usedHandles.set(base, count + 1);
+    const handle = count === 0 ? base : `${base}-${count + 1}`;
+
+    const productRows = toShopifyCsvRows(product, handle);
+    if (!productRows[0]['Image Src']) {
+      skippedNoImage += 1;
+    }
+    rows.push(...productRows);
+  }
+
+  return { rows, skipped_no_image: skippedNoImage };
+}
+
 export function mapWorkspaceExport(record, index) {
   const category = normalizeCategoryName(record['Category']);
   const subcategory = normalizeSubcategoryName(record['Subcategory']);

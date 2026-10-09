@@ -37,7 +37,10 @@ Sign up, or use the demo account: **demo@store.test / password123**
 - **Login / Signup**: JWT auth; each account has its own catalog and notes
 - **Stats Cards**: Catalog size, Add now, Consider, Niche fits
 - **Grades chart + product table**: Filter by US warehouse, grade, and name search (press Enter)
-- **Import CSV**: Upload a CJ/TopDawg export to score it
+- **Import CSV / Excel**: Upload one or several CJ/TopDawg exports (.csv or .xlsx) at once — they merge and dedupe into one scored catalog
+- **Checkboxes + "Select all <grade>"**: Pick the products you want to sell; selections persist in your account
+- **Export selected to Shopify**: Downloads `shopify-products.csv` — import it in Shopify Admin > Products > Import
+- **Photos button (per row)**: Attach pictures from your PC; they show as thumbnails and improve the quality score (note: re-importing a catalog replaces everything, clearing selections and uploaded photos)
 - **Download launch list**: 30-SKU launch catalog CSV
 - **Research notes**: Save why a product is in or out
 

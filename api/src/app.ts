@@ -4,7 +4,15 @@ import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { requireUser, signToken } from "./auth.js";
-import { catalogMetrics, launchCatalog, productsForUser, replaceCatalog } from "./catalog.js";
+import {
+  addProductImages,
+  catalogMetrics,
+  launchCatalog,
+  productsForUser,
+  replaceCatalog,
+  setSelection,
+  shopifyExport
+} from "./catalog.js";
 import { Product, ResearchNote, Supplier, User } from "./models.js";
 
 export function createApp() {
@@ -99,18 +107,27 @@ export function createApp() {
 
   app.post("/api/imports/catalog", requireUser, async (req, res, next) => {
     try {
-      const csvText = String(req.body?.csvText || req.body?.csv || "");
-      if (!csvText.trim()) {
-        res.status(400).json({ error: "Upload a CSV export from CJ or TopDawg first." });
+      const single = String(req.body?.csvText || req.body?.csv || "");
+      const many = Array.isArray(req.body?.csvTexts)
+        ? req.body.csvTexts.map((text: unknown) => String(text)).filter((text: string) => text.trim())
+        : [];
+      const csvTexts = many.length > 0 ? many : single.trim() ? [single] : [];
+
+      if (csvTexts.length === 0) {
+        res.status(400).json({ error: "Upload a CSV or Excel export from CJ or TopDawg first." });
+        return;
+      }
+      if (csvTexts.length > 10) {
+        res.status(400).json({ error: "Import 10 files or fewer at a time." });
         return;
       }
 
       let imported;
       try {
-        imported = await replaceCatalog(req.user!.id, csvText);
+        imported = await replaceCatalog(req.user!.id, csvTexts);
       } catch (importError) {
         console.error("CSV import failed:", importError);
-        res.status(400).json({ error: "Could not read that file. Upload a CSV export from CJ or TopDawg." });
+        res.status(400).json({ error: "Could not read that file. Upload a CSV or Excel export from CJ or TopDawg." });
         return;
       }
       res.json({
@@ -118,6 +135,48 @@ export function createApp() {
         products: await productsForUser(req.user!.id),
         message: "Catalog saved to your account. Nothing was sent to Shopify."
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/products/selection", requireUser, async (req, res, next) => {
+    try {
+      const ids = Array.isArray(req.body?.ids) ? req.body.ids.map((id: unknown) => String(id)) : [];
+      const selected = req.body?.selected === true;
+
+      if (ids.length === 0) {
+        res.status(400).json({ error: "Pick at least one product first." });
+        return;
+      }
+      if (ids.length > 2000) {
+        res.status(400).json({ error: "Too many products in one request." });
+        return;
+      }
+
+      const updated = await setSelection(req.user!.id, ids, selected);
+      res.json({ updated, selected });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/products/:id/images", requireUser, async (req, res, next) => {
+    try {
+      const result = await addProductImages(req.user!.id, String(req.params.id), req.body?.images);
+      if ("error" in result) {
+        res.status(result.status).json({ error: result.error });
+        return;
+      }
+      res.json({ product: result.product, message: "Photos saved. Quality score refreshed." });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/exports/shopify", requireUser, async (req, res, next) => {
+    try {
+      res.json(await shopifyExport(req.user!.id));
     } catch (error) {
       next(error);
     }

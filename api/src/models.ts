@@ -19,6 +19,7 @@ const productSchema = new mongoose.Schema(
     overallScore: { type: Number, default: 0, index: true },
     collectionId: { type: String, default: "" },
     supplierName: { type: String, default: "Unknown" },
+    selected: { type: Boolean, default: false, index: true },
     payload: { type: mongoose.Schema.Types.Mixed, required: true }
   },
   { timestamps: true }

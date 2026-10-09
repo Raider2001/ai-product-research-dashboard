@@ -19,6 +19,12 @@ export interface Product {
   listing_verdict?: string;
   listing_reason?: string;
   supplier_name?: string;
+  selected?: boolean;
+  quality_score?: number;
+  image_src?: string;
+  image_urls?: string[];
+  image_alt_text?: string;
+  uploaded_images?: string[];
 }
 
 export interface Metrics {

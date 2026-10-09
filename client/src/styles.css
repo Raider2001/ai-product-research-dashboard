@@ -8,6 +8,23 @@
 
 body { margin: 0; }
 
+:focus-visible {
+  outline: 3px solid #0f6e6e;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 button, .file-button {
   background: #0f6e6e;
   color: white;
@@ -67,7 +84,12 @@ h1 { margin: 0.2rem 0 0.6rem; font-size: 2rem; }
 
 .lede, .auth-switch { color: #5c564e; }
 
-.form-error, .status { color: #8d2f2f; }
+.form-error { color: #8d2f2f; }
+
+.status { padding: 0.6rem 0.9rem; border-radius: 10px; margin: 0; }
+.status-error { color: #8d2f2f; background: #f8d9d4; }
+.status-success { color: #1e5e3a; background: #d8f3e4; }
+.status-info { color: #1c1915; background: #efe2cc; }
 
 .app-shell { padding: 1.5rem; display: grid; gap: 1rem; }
 
@@ -85,7 +107,39 @@ h1 { margin: 0.2rem 0 0.6rem; font-size: 2rem; }
 
 .check { display: flex; gap: 0.4rem; align-items: center; }
 
-.file-button input { display: none; }
+.file-button { position: relative; }
+
+/* Keep the file input focusable for keyboard users while hiding it visually. */
+.file-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.file-button:focus-within {
+  outline: 3px solid #0f6e6e;
+  outline-offset: 2px;
+}
+
+.photo-button {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+  margin-top: 0.3rem;
+  display: inline-block;
+}
+
+.thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+}
 
 .stats {
   display: grid;
