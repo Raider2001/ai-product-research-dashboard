@@ -103,8 +103,10 @@ products — this file does that."*
 
 | File | What to say |
 | --- | --- |
+| `main.tsx` | The entry point: creates the React root inside `index.html`'s one `<div id="root">` (this is a single-page app) and nests the wrappers — `StrictMode` (dev-only checks) → `BrowserRouter` (client-side routing) → `AuthProvider` (auth available everywhere) → `App`. |
+| `App.tsx` | The route table: `/login`, `/signup`, `/dashboard`. The dashboard is wrapped in a `PrivateRoute` guard that renders `<Navigate to="/login" />` when there's no token — the standard protected-route pattern. |
 | `api.ts` | One tiny fetch wrapper: attaches the JWT from localStorage, parses JSON, turns API errors into thrown Errors. |
-| `AuthContext.tsx` | React context holding the logged-in user + token. |
+| `AuthContext.tsx` | React context holding the logged-in user + token, exposed only through the `useAuth()` custom hook — consumers never touch the context object directly. |
 | `importFiles.ts` | File-upload prep: `.csv` is read as text; `.xlsx` is converted **in the browser** with SheetJS (`XLSX.read` → `sheet_to_csv`), CJ's banner row above the headers is stripped, and size guards fail fast with friendly messages before anything is uploaded. |
 | `imageTools.ts` | Photo prep: draws each image onto a `<canvas>` scaled to max 800px and exports JPEG data-URLs under ~300KB, so phone photos don't bloat the database. |
 | `pages/DashboardPage.tsx` | The **container**: all state (`useState`), one `load()` that refetches everything, the filter toolbar, and every import/export/selection handler. It renders the four presentational components below and passes them data as props and handlers as callbacks — data down, events up. |
@@ -199,7 +201,48 @@ in-memory database that resets on restart.
 
 ---
 
-## 6. Suggested 10-minute review agenda
+## 6. React quick answers (mentor call or job interview)
+
+**The pattern in one sentence:** `DashboardPage` is a container — it owns all
+state, data loading, and handlers — and the files in `components/` are
+presentational: data flows down as props, events come back up as callbacks.
+Debugging rule: state bugs live in the page, display bugs live in the component.
+
+**Exports/imports convention:** default export for components (one per file,
+importer picks the name: `import App from "./App"`); named exports for hooks,
+helpers, types, and constants (`import { useAuth } from "../AuthContext"` —
+searchable and rename-safe). `import type { Product }` is erased at compile time.
+
+**"Why Context instead of Redux?"** The global state is one token and one user
+object. Context is built in, and the `useAuth()` hook hides the implementation,
+so swapping state libraries later touches one file.
+
+**"What does the useEffect dependency array do?"** The effect re-runs only when
+a listed value changed — here `[usOnly, grade]`, so toggling a filter refetches.
+Search is deliberately excluded: it refetches on Enter, not on every keystroke.
+
+**"Why `setProducts(prev => ...)` instead of using the variable?"** The
+functional form always sees the latest state even when updates batch — safer in
+async handlers. The `.map` + spread returns new objects so React detects change.
+
+**"Why `useMemo` / `useCallback`?"** Stable identities: without them every
+render creates new arrays/functions, which makes dependency arrays and memoized
+children see phantom changes. Used where identity matters, not everywhere.
+
+**"Controlled components?"** Every form input's `value` comes from state and
+`onChange` writes back — React state is the single source of truth (see
+`LoginPage` or the note form in `NotesPanel`).
+
+**"Dev vs prod wiring?"** In dev, Vite proxies `/api` to Express on port 8000.
+In production the API serves the built `client/dist` itself (`SERVE_CLIENT`), so
+one origin, one Render service, no CORS.
+
+**"What would you refactor next?"** Debounced search, pagination for large
+catalogs, `React.memo` on table rows, and moving the JWT to an httpOnly cookie.
+
+---
+
+## 7. Suggested 10-minute review agenda
 
 1. (2 min) Pitch + architecture picture (sections 1–2 of this doc).
 2. (3 min) Live demo following section 4: import the converted CJ CSV from
