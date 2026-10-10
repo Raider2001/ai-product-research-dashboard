@@ -107,9 +107,13 @@ products — this file does that."*
 | `AuthContext.tsx` | React context holding the logged-in user + token. |
 | `importFiles.ts` | File-upload prep: `.csv` is read as text; `.xlsx` is converted **in the browser** with SheetJS (`XLSX.read` → `sheet_to_csv`), CJ's banner row above the headers is stripped, and size guards fail fast with friendly messages before anything is uploaded. |
 | `imageTools.ts` | Photo prep: draws each image onto a `<canvas>` scaled to max 800px and exports JPEG data-URLs under ~300KB, so phone photos don't bloat the database. |
-| `pages/DashboardPage.tsx` | The whole dashboard: filters, grades chart, product table with selection checkboxes and per-row Photos buttons, import/export handlers. State is plain `useState` + one `load()` that refetches everything. |
+| `pages/DashboardPage.tsx` | The **container**: all state (`useState`), one `load()` that refetches everything, the filter toolbar, and every import/export/selection handler. It renders the four presentational components below and passes them data as props and handlers as callbacks — data down, events up. |
+| `components/StatsBar.tsx` | The four headline numbers (catalog size, Add now, Consider, Niche fits). Pure display from a `metrics` prop. |
+| `components/GradeChart.tsx` | The Recharts bar chart of grades, with `role="img"` + a text summary for screen readers. |
+| `components/ProductTable.tsx` | The scored catalog table: selection checkboxes and per-row Photos buttons. Never calls the API — it reports events up via `onToggleSelect` / `onUploadPhotos` callbacks. |
+| `components/NotesPanel.tsx` | Research-notes form + list. The form drafts are component-local state (nothing else needs them); saving goes up through an `onCreate` callback. |
 
-Accessibility specifics worth pointing at in `DashboardPage.tsx` + `styles.css`:
+Accessibility specifics worth pointing at in the page, the components, and `styles.css`:
 the file inputs use a visually-hidden-but-focusable pattern (not `display:none`,
 which removes keyboard access), `:focus-visible` outlines on everything, a
 `role="status"` live region announces import/export results to screen readers,
@@ -201,6 +205,7 @@ in-memory database that resets on restart.
 2. (3 min) Live demo following section 4: import the converted CJ CSV from
    `data/1-cj-downloads/`, filter, select, upload a photo, export.
 3. (3 min) Code tour: `SCORE_WEIGHTS` + `enrichCatalogScoring` in the
-   pipeline → one route in `app.ts` → `DashboardPage.tsx` import handler.
+   pipeline → one route in `app.ts` → `DashboardPage.tsx` import handler →
+   how `ProductTable` gets its data as props and sends events back up.
 4. (2 min) `cd api && npm test` — 38 green tests, point out the data-isolation
    and cross-file dedupe cases.
