@@ -53,7 +53,8 @@ Sign up with your own email, or use the demo account:
 ## Step 3 — Get the catalog CSV from CJ
 
 1. In CJdropshipping, filter to **US warehouse** if the screen allows it.
-2. Export as **CSV** — not the Excel workbook (the .xlsx can be hundreds of MB).
+2. Export as **CSV** or the **Excel workbook (.xlsx)** — the dashboard converts Excel
+   files automatically on import. CSV is still faster for very large catalogs.
 3. Save the file into `data/1-cj-downloads/`, named by date
    (example: `cj-us-2026-09-26.csv`).
 
@@ -109,7 +110,8 @@ that only the ~30 screened winners go live.
 | --- | --- |
 | Page loads but "Log in to continue" errors | The API restarted — log in again |
 | My imported products disappeared | In-memory DB reset on API restart — re-import the CSV (Step 4) |
-| Import fails | Make sure it's a **CSV** export from CJ, not the .xlsx workbook |
+| Import fails | Use a CSV or .xlsx export from CJ; split huge exports into batches |
+| .xlsx is hundreds of MB (embedded photos) | Run `python scripts/convert-cj-xlsx.py "path	oile.xlsx"` — it writes a small CSV into `data/1-cj-downloads/` |
 | No products in the table | Turn off "US warehouse only," or clear the grade filter |
 | Search doesn't do anything | Press **Enter** after typing |
 

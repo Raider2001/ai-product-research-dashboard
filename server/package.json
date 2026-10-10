@@ -1,0 +1,9 @@
+{
+    "name": "ai-product-research-dashboard-server",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "dependencies": {
+        "csv-parse": "^5.5.6"
+    }
+}
